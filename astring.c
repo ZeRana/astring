@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #include "contracts.h"
+#include "astring.h"
 
 void *xmalloc(size_t size){
     void *p = malloc(size);
@@ -44,6 +45,7 @@ bool is_astring (astring_t *a){
 
 }
 
+// O(1)
 size_t astring_size(astring_t *a){
     REQUIRES(is_astring(a));
     // NULL is the empty string
@@ -51,6 +53,7 @@ size_t astring_size(astring_t *a){
     return a->size;
 }
 
+// O(size)
 astring_t *string_to_astring_helper(char *str, size_t size){
     if (size == 0) {return NULL;}
     ASSERT(str != NULL);
@@ -64,6 +67,7 @@ astring_t *string_to_astring_helper(char *str, size_t size){
     return a;
 }
 
+// O(strlen(str))
 astring_t *string_to_astring(char *str){
     REQUIRES(str != NULL);
     size_t len = strlen(str);
@@ -72,10 +76,21 @@ astring_t *string_to_astring(char *str){
     return a;
 }
 
+// O(a->size)
+void free_astring(astring_t *a){
+    if(a == NULL) {(void)0;}
+    else if (a->size == 1) {free(a);}
+    else{
+        free_astring(a->left);
+        free_astring(a->right);
+        free(a);
+    }
+}
+
+// O(a->size)
 void print_astring(astring_t *a){
     REQUIRES(is_astring(a));
     if (a == NULL) {(void)0;}
-    else if (a->left == NULL && a->right == NULL) {printf("%c", a->data);}
     else{
         print_astring(a->left);
         printf("%c", a->data);
@@ -83,8 +98,24 @@ void print_astring(astring_t *a){
     }
 }
 
-int main(){
-    astring_t *a = string_to_astring("Hello World");
-    print_astring(a);
-    return 0;
+size_t astring_to_string_helper(astring_t *a, char *str, size_t index){
+    REQUIRES(is_astring(a));
+    if (a == NULL) {return index;}
+    else{
+        index = astring_to_string_helper(a->left, str, index);
+        str[index] = a->data;
+        index++;
+        index = astring_to_string_helper(a->right, str, index);
+        return index;
+    }
+
 }
+
+char *astring_to_string(astring_t *a){
+    REQUIRES(is_astring(a));
+    char *str = xmalloc((a->size + 1) * sizeof(char));
+    astring_to_string_helper(a, str, 0);
+    str[a->size] = '\0';
+    return str;
+}
+

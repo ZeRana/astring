@@ -9,11 +9,11 @@ release: astring
 
 debug: astringd
 
-astring: astring.c contracts.h
+astring: astring.c astring.h contracts.h
 	$(CC) $(CFLAGS) -o $@ astring.c
 
-astringd: astring.c contracts.h
-	$(CC) $(CFLAGS) -DDEBUG -o $@ astring.c
+astringd: astring.c astring.h astring_test.c contracts.h
+	$(CC) $(CFLAGS) -DDEBUG -o $@ astring.c astring_test.c
 
 clean:
 	rm -f astring astringd
