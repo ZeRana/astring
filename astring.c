@@ -2,9 +2,33 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <pthread.h>
+#include <stdint.h>
 
 #include "contracts.h"
 #include "astring.h"
+
+#define THREAD_DEPTH_MAX 8
+
+// Limiting recursive functions thread making abilities
+typedef struct {
+    uint8_t num_threads;
+    pthread_mutex_t lock;
+} thread_limiter_t;
+
+// This is ideal for stack based creation
+// If not being used on the stack then malloc an object before passing into
+void new_thread_limiter (thread_limiter_t *tl){
+    tl->num_threads = 0;
+    pthread_mutex_init(&tl->lock, NULL);
+}
+
+// Assumes stack based creation
+// Call free on tl if this was heap based
+void free_thread_limiter (thread_limiter_t *tl) {
+    pthread_mutex_destroy(&tl->lock);
+}
+
 
 void *xmalloc(size_t size){
     void *p = malloc(size);
@@ -119,12 +143,63 @@ char *astring_to_string(astring_t *a){
     return str;
 }
 
-bool astring_eq(astring_t *a1, astring_t *a2){
+typedef struct {
+    astring_t *a1;
+    astring_t *a2;
+    thread_limiter_t *tl;
+    bool result;
+} eq_helper_t;
+
+bool astring_eq_helper(astring_t *a1, astring_t *a2, thread_limiter_t *tl);
+
+void* astring_eq_thread(void *args){
+    eq_helper_t *arg = (eq_helper_t*)args;
+    arg->result = astring_eq_helper(arg->a1, arg->a2, arg->tl);
+    return (void*)arg;
+}
+
+bool astring_eq_helper(astring_t *a1, astring_t *a2, thread_limiter_t *tl){
     REQUIRES(is_astring(a1));
     REQUIRES(is_astring(a2));
     if (a1 == NULL){return a2 == NULL;}
     else if (a2 == NULL) {return false;}
     if (a1->data != a2->data) {return false;}
-    return astring_eq(a1->left, a2->left) & astring_eq(a1->right, a2->right);
+
+    // Checking to insure we don't over utilize resources
+    pthread_mutex_lock(&tl->lock);
+    bool spawn = (tl->num_threads < THREAD_DEPTH_MAX);
+    if (spawn) {tl->num_threads++;}
+    pthread_mutex_unlock(&tl->lock);
+    if (!spawn){
+        return astring_eq_helper(a1->left, a2->left, tl) & astring_eq_helper(a1->right, a2->right, tl);
+    } else{
+        eq_helper_t left_args = { a1->left, a2->left, tl, false };
+        pthread_t tid;
+        int success = pthread_create(&tid, NULL, astring_eq_thread, &left_args);
+        bool left_result = false;
+        if (success == 0){
+            // Thread created
+            pthread_join(tid, NULL);
+            left_result = left_args.result;
+        } else {
+            // Thread not created
+            left_result = astring_eq_helper(a1->left, a2->left, tl);
+        }
+
+        bool right_result = astring_eq_helper(a1->right, a2->right, tl);
+
+        pthread_mutex_lock(&tl->lock);
+        tl->num_threads--;
+        pthread_mutex_unlock(&tl->lock);
+        return left_result & right_result;
+    }
+}
+
+bool astring_eq(astring_t *a1, astring_t *a2){
+    thread_limiter_t tl;
+    new_thread_limiter(&tl);
+    bool res = astring_eq_helper(a1, a2, &tl);
+    free_thread_limiter(&tl);
+    return res;  
 }
 
