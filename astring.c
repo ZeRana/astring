@@ -77,25 +77,71 @@ size_t astring_size(astring_t *a){
     return a->size;
 }
 
+typedef struct {
+    char *str;
+    size_t size;
+    thread_limiter_t *tl;
+    astring_t *result;
+} to_string_helper_t;
+
+astring_t *string_to_astring_helper(char *str, size_t size, thread_limiter_t *tl);
+
+void* string_to_astring_thread(void *args){
+    to_string_helper_t *arg = (to_string_helper_t*)args;
+    arg->result = string_to_astring_helper(arg->str, arg->size, arg->tl);
+    return (void*)arg;
+}
+
 // O(size)
-astring_t *string_to_astring_helper(char *str, size_t size){
+astring_t *string_to_astring_helper(char *str, size_t size, thread_limiter_t *tl){
     if (size == 0) {return NULL;}
     ASSERT(str != NULL);
     size_t mid = size/2;
     astring_t *a = xmalloc(sizeof(astring_t));
     a->size = size;
     a->data = *(str + mid);
-    a->left = string_to_astring_helper(str, mid);
-    a->right = string_to_astring_helper((str + mid + 1), (size-mid-1));
-    ENSURES(is_astring(a));
-    return a;
+
+    // Checking to insure we don't over utilize resources
+    pthread_mutex_lock(&tl->lock);
+    bool spawn = (tl->num_threads < THREAD_DEPTH_MAX);
+    if (spawn) {tl->num_threads++;}
+    pthread_mutex_unlock(&tl->lock);
+
+    if(!spawn){
+        a->left = string_to_astring_helper(str, mid, tl);
+        a->right = string_to_astring_helper((str + mid + 1), (size-mid-1), tl);
+        ENSURES(is_astring(a));
+        return a;
+    } else {
+        to_string_helper_t left_args = {str, mid, tl, NULL};
+        pthread_t tid;
+        int success = pthread_create(&tid, NULL, string_to_astring_thread, &left_args);
+        if (success == 0){
+            // Thread created
+            pthread_join(tid, NULL);
+            a->left = left_args.result;
+        } else {
+            // Thread not created
+            a->left = string_to_astring_helper(str, mid, tl);
+        }
+        a->right = string_to_astring_helper((str + mid + 1), (size-mid-1), tl);
+        pthread_mutex_lock(&tl->lock);
+        tl->num_threads--;
+        pthread_mutex_unlock(&tl->lock);
+        return a;
+    }
+
+
 }
 
 // O(strlen(str))
 astring_t *string_to_astring(char *str){
+    thread_limiter_t tl;
+    new_thread_limiter(&tl);
     REQUIRES(str != NULL);
     size_t len = strlen(str);
-    astring_t *a = string_to_astring_helper(str, len);
+    astring_t *a = string_to_astring_helper(str, len, &tl);
+    free_thread_limiter(&tl);
     ENSURES(is_astring(a));
     return a;
 }
@@ -172,7 +218,7 @@ bool astring_eq_helper(astring_t *a1, astring_t *a2, thread_limiter_t *tl){
     pthread_mutex_unlock(&tl->lock);
     if (!spawn){
         return astring_eq_helper(a1->left, a2->left, tl) & astring_eq_helper(a1->right, a2->right, tl);
-    } else{
+    } else {
         eq_helper_t left_args = { a1->left, a2->left, tl, false };
         pthread_t tid;
         int success = pthread_create(&tid, NULL, astring_eq_thread, &left_args);
