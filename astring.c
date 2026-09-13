@@ -249,3 +249,33 @@ bool astring_eq(astring_t *a1, astring_t *a2){
     return res;  
 }
 
+// Returns a pointer to the node for future inserting use 
+astring_t *astring_index_at_helper(astring_t *a, size_t i, size_t *seen){
+    REQUIRES(is_astring(a));
+    if (a == NULL){
+        return NULL;
+    } else {
+        astring_t *left_result = astring_index_at_helper(a->left, i, seen);
+        if (left_result != NULL) {
+            return left_result;
+        } else if (*seen == i) {
+            return a;
+        } else {
+            (*seen)++;
+            return astring_index_at_helper(a->right, i, seen);
+        }
+    }
+}
+
+char astring_index_at(astring_t *a, size_t i){
+    REQUIRES(is_astring(a));
+    size_t seen = 0;
+    astring_t *elem = astring_index_at_helper(a, i, &seen);
+    if (elem == NULL){
+        return '\0';
+    } else {
+        return elem->data;
+    }
+
+}
+

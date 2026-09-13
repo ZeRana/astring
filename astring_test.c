@@ -29,6 +29,15 @@ bool test_eq(char *s1, char *s2){
     return (strres == 0) == (astringres);
 }
 
+void test_index_at(char *s){
+    astring_t *a = string_to_astring(s);
+    for (size_t i = 0; i < strlen(s); i++){
+        assert(astring_index_at(a, i) == s[i]);
+    }
+
+    free_astring(a);
+}
+
 int main (){
     assert(test_convert("Hello World"));
     assert(test_convert("Skibidi Gyatt"));
@@ -40,6 +49,9 @@ int main (){
     assert(test_eq("", ""));
     assert(test_eq("Silly", "Goose"));
     assert(test_eq("Silly", "Sille"));
+
+    test_index_at("Hello World");
+    test_index_at("Silly Goose");
 
     printf("All tests passed!\n");
     return 0;
