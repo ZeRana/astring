@@ -14,5 +14,6 @@ astring_t *string_to_astring(char *str);
 void free_astring(astring_t *a);
 void print_astring(astring_t *a);
 char *astring_to_string(astring_t *a);
+bool astring_eq(astring_t *a1, astring_t *a2);
 
 #endif

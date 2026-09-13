@@ -113,9 +113,18 @@ size_t astring_to_string_helper(astring_t *a, char *str, size_t index){
 
 char *astring_to_string(astring_t *a){
     REQUIRES(is_astring(a));
-    char *str = xmalloc((a->size + 1) * sizeof(char));
+    char *str = xmalloc((astring_size(a) + 1) * sizeof(char));
     astring_to_string_helper(a, str, 0);
-    str[a->size] = '\0';
+    str[astring_size(a)] = '\0';
     return str;
+}
+
+bool astring_eq(astring_t *a1, astring_t *a2){
+    REQUIRES(is_astring(a1));
+    REQUIRES(is_astring(a2));
+    if (a1 == NULL){return a2 == NULL;}
+    else if (a2 == NULL) {return false;}
+    if (a1->data != a2->data) {return false;}
+    return astring_eq(a1->left, a2->left) & astring_eq(a1->right, a2->right);
 }
 
