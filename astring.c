@@ -10,6 +10,8 @@
 
 #define THREAD_DEPTH_MAX 8
 
+//@TODO add index tracking to fix a lot of big O bounds
+
 // Limiting recursive functions thread making abilities
 typedef struct {
     uint8_t num_threads;
@@ -70,7 +72,7 @@ bool is_astring (astring_t *a){
 }
 
 // O(1)
-size_t astring_size(astring_t *a){
+inline size_t astring_size(astring_t *a){
     REQUIRES(is_astring(a));
     // NULL is the empty string
     if (a == NULL) {return 0;}
@@ -249,7 +251,8 @@ bool astring_eq(astring_t *a1, astring_t *a2){
     return res;  
 }
 
-// Returns a pointer to the node for future inserting use 
+// Returns a pointer to the node for future inserting use
+// O(1) :sob:
 astring_t *astring_index_at_helper(astring_t *a, size_t i, size_t *seen){
     REQUIRES(is_astring(a));
     if (a == NULL){
@@ -278,4 +281,63 @@ char astring_index_at(astring_t *a, size_t i){
     }
 
 }
+
+
+// Insertion logic was very heavily inspired by CMU's 15122 lecture slides
+inline void fix_size(astring_t *a){
+    if (a != NULL){
+        a->size = 1 + max(astring_size(a->left), astring_size(a->right));
+    }
+}
+
+astring_t* rotate_left(astring_t *a){
+    astring_t *temp = a->right;
+    a->right = a->right->left;
+    temp->left = a;
+    fix_size(a);
+    fix_size(temp);
+    return temp;
+}
+
+astring_t *rotate_right(astring_t *a){
+    astring_t *temp = a->left;
+    a->left = a->left->right;
+    temp->right = a;
+    fix_size(a);
+    fix_size(temp);
+    return temp;
+}
+
+astring_t *rebalance_right(astring_t *a){
+    if (astring_size(a->right) - astring_size(a->left) == 2){
+        if (astring_size(a->right->right) > astring_size(a->right->left)){
+            a = rotate_left(a);
+        } else {
+            a->right = rotate_right(a->right);
+            a = rotate_left(a);
+        }
+    } else {
+        fix_size(a);
+    }
+    return a;
+}
+
+astring_t *rebalance_left(astring_t *a){
+    if (astring_size(a->left) - astring_size(a->right) == 2) {
+        if (astring_size(a->left->left) > astring_size(a->left->right)) {
+            a = rotate_right;
+        } else {
+            a->left = rotate(a->left);
+            a = rotate_right(a);
+        }
+    } else {
+        fix_size(a);
+    }
+
+    return a;
+}
+
+
+
+
 
