@@ -47,6 +47,7 @@ typedef struct astring_header {
     struct astring_header *left;
     struct astring_header *right;
     size_t size;
+    size_t index;
     char data;
 } astring_t;
 
@@ -58,9 +59,11 @@ bool is_astring (astring_t *a){
 
     if (a->left != NULL) {
         leftsize = a->left->size;
+        if (a->index <= a->left->index) {return false;}
     }
     if (a->right != NULL){
         rightsize = a->right->size;
+        if (a->index >= a->right->index) {return false;}
     }
 
     if (a->size != rightsize + leftsize + 1) {return false;}
@@ -82,26 +85,28 @@ inline size_t astring_size(astring_t *a){
 typedef struct {
     char *str;
     size_t size;
+    size_t offset;
     thread_limiter_t *tl;
     astring_t *result;
 } to_string_helper_t;
 
-astring_t *string_to_astring_helper(char *str, size_t size, thread_limiter_t *tl);
+astring_t *string_to_astring_helper(char *str, size_t size, size_t offset, thread_limiter_t *tl);
 
 void* string_to_astring_thread(void *args){
     to_string_helper_t *arg = (to_string_helper_t*)args;
-    arg->result = string_to_astring_helper(arg->str, arg->size, arg->tl);
+    arg->result = string_to_astring_helper(arg->str, arg->size, arg->offset, arg->tl);
     return (void*)arg;
 }
 
 // O(size)
-astring_t *string_to_astring_helper(char *str, size_t size, thread_limiter_t *tl){
+astring_t *string_to_astring_helper(char *str, size_t size, size_t offset, thread_limiter_t *tl){
     if (size == 0) {return NULL;}
     ASSERT(str != NULL);
     size_t mid = size/2;
     astring_t *a = xmalloc(sizeof(astring_t));
     a->size = size;
     a->data = *(str + mid);
+    a->index = offset + mid;
 
     // Checking to insure we don't over utilize resources
     pthread_mutex_lock(&tl->lock);
@@ -110,12 +115,12 @@ astring_t *string_to_astring_helper(char *str, size_t size, thread_limiter_t *tl
     pthread_mutex_unlock(&tl->lock);
 
     if(!spawn){
-        a->left = string_to_astring_helper(str, mid, tl);
-        a->right = string_to_astring_helper((str + mid + 1), (size-mid-1), tl);
+        a->left = string_to_astring_helper(str, mid, offset, tl);
+        a->right = string_to_astring_helper((str + mid + 1), (size-mid-1), (offset + mid + 1), tl);
         ENSURES(is_astring(a));
         return a;
     } else {
-        to_string_helper_t left_args = {str, mid, tl, NULL};
+        to_string_helper_t left_args = {str, mid, offset, tl, NULL};
         pthread_t tid;
         int success = pthread_create(&tid, NULL, string_to_astring_thread, &left_args);
         if (success == 0){
@@ -124,9 +129,9 @@ astring_t *string_to_astring_helper(char *str, size_t size, thread_limiter_t *tl
             a->left = left_args.result;
         } else {
             // Thread not created
-            a->left = string_to_astring_helper(str, mid, tl);
+            a->left = string_to_astring_helper(str, mid, offset, tl);
         }
-        a->right = string_to_astring_helper((str + mid + 1), (size-mid-1), tl);
+        a->right = string_to_astring_helper((str + mid + 1), (size-mid-1), (offset + mid + 1), tl);
         pthread_mutex_lock(&tl->lock);
         tl->num_threads--;
         pthread_mutex_unlock(&tl->lock);
@@ -142,7 +147,7 @@ astring_t *string_to_astring(char *str){
     new_thread_limiter(&tl);
     REQUIRES(str != NULL);
     size_t len = strlen(str);
-    astring_t *a = string_to_astring_helper(str, len, &tl);
+    astring_t *a = string_to_astring_helper(str, len, 0, &tl);
     free_thread_limiter(&tl);
     ENSURES(is_astring(a));
     return a;
@@ -252,28 +257,22 @@ bool astring_eq(astring_t *a1, astring_t *a2){
 }
 
 // Returns a pointer to the node for future inserting use
-// O(1) :sob:
-astring_t *astring_index_at_helper(astring_t *a, size_t i, size_t *seen){
+astring_t *astring_index_at_helper(astring_t *a, size_t i){
     REQUIRES(is_astring(a));
     if (a == NULL){
         return NULL;
+    } else if (a->index == i) { 
+        return a;
+    } else if (a->index > i) {
+        return astring_index_at_helper(a->left, i);
     } else {
-        astring_t *left_result = astring_index_at_helper(a->left, i, seen);
-        if (left_result != NULL) {
-            return left_result;
-        } else if (*seen == i) {
-            return a;
-        } else {
-            (*seen)++;
-            return astring_index_at_helper(a->right, i, seen);
-        }
+        return astring_index_at_helper(a->right, i);
     }
 }
 
 char astring_index_at(astring_t *a, size_t i){
     REQUIRES(is_astring(a));
-    size_t seen = 0;
-    astring_t *elem = astring_index_at_helper(a, i, &seen);
+    astring_t *elem = astring_index_at_helper(a, i);
     if (elem == NULL){
         return '\0';
     } else {
@@ -284,58 +283,58 @@ char astring_index_at(astring_t *a, size_t i){
 
 
 // Insertion logic was very heavily inspired by CMU's 15122 lecture slides
-inline void fix_size(astring_t *a){
-    if (a != NULL){
-        a->size = 1 + max(astring_size(a->left), astring_size(a->right));
-    }
-}
+// inline void fix_size(astring_t *a){
+//     if (a != NULL){
+//         a->size = 1 + max(astring_size(a->left), astring_size(a->right));
+//     }
+// }
 
-astring_t* rotate_left(astring_t *a){
-    astring_t *temp = a->right;
-    a->right = a->right->left;
-    temp->left = a;
-    fix_size(a);
-    fix_size(temp);
-    return temp;
-}
+// astring_t* rotate_left(astring_t *a){
+//     astring_t *temp = a->right;
+//     a->right = a->right->left;
+//     temp->left = a;
+//     fix_size(a);
+//     fix_size(temp);
+//     return temp;
+// }
 
-astring_t *rotate_right(astring_t *a){
-    astring_t *temp = a->left;
-    a->left = a->left->right;
-    temp->right = a;
-    fix_size(a);
-    fix_size(temp);
-    return temp;
-}
+// astring_t *rotate_right(astring_t *a){
+//     astring_t *temp = a->left;
+//     a->left = a->left->right;
+//     temp->right = a;
+//     fix_size(a);
+//     fix_size(temp);
+//     return temp;
+// }
 
-astring_t *rebalance_right(astring_t *a){
-    if (astring_size(a->right) - astring_size(a->left) == 2){
-        if (astring_size(a->right->right) > astring_size(a->right->left)){
-            a = rotate_left(a);
-        } else {
-            a->right = rotate_right(a->right);
-            a = rotate_left(a);
-        }
-    } else {
-        fix_size(a);
-    }
-    return a;
-}
+// astring_t *rebalance_right(astring_t *a){
+//     if (astring_size(a->right) - astring_size(a->left) == 2){
+//         if (astring_size(a->right->right) > astring_size(a->right->left)){
+//             a = rotate_left(a);
+//         } else {
+//             a->right = rotate_right(a->right);
+//             a = rotate_left(a);
+//         }
+//     } else {
+//         fix_size(a);
+//     }
+//     return a;
+// }
 
-astring_t *rebalance_left(astring_t *a){
-    if (astring_size(a->left) - astring_size(a->right) == 2) {
-        if (astring_size(a->left->left) > astring_size(a->left->right)) {
-            a = rotate_right;
-        } else {
-            a->left = rotate(a->left);
-            a = rotate_right(a);
-        }
-    } else {
-        fix_size(a);
-    }
+// astring_t *rebalance_left(astring_t *a){
+//     if (astring_size(a->left) - astring_size(a->right) == 2) {
+//         if (astring_size(a->left->left) > astring_size(a->left->right)) {
+//             a = rotate_right(a);
+//         } else {
+//             a->left = rotate(a->left);
+//             a = rotate_right(a);
+//         }
+//     } else {
+//         fix_size(a);
+//     }
 
-    return a;
-}
+//     return a;
+// }
 
 
 
