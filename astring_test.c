@@ -38,6 +38,42 @@ void test_index_at(char *s){
     free_astring(a);
 }
 
+// len(new_vals) <= len(s)
+void test_update(char *s, char *new_vals){
+    astring_t *a = string_to_astring(s);
+    for (size_t i = 0; i < strlen(new_vals); i++){
+        astring_update_char(a, i, new_vals[i]);
+        assert(astring_index_at(a, i) == new_vals[i]);
+        for (size_t j = i + 1; j < strlen(new_vals); j++){
+            assert(astring_index_at(a, j) == s[j]);
+        }
+    }
+
+    free_astring(a);
+}
+
+// index <= len(s)
+void test_insert(char *s, char* t, size_t index){
+    size_t res_len = strlen(s) + strlen(t) + 1;
+    char *res = malloc(sizeof(char) * res_len);
+    if (res == NULL) {
+        return;
+    }
+    
+    memcpy(res, s, index);
+    memcpy(res + index, t, strlen(t));
+    memcpy(res + index + strlen(t), s + index, strlen(s) - index);
+    res[res_len - 1] = '\0';
+
+    astring_t *a = string_to_astring(s);
+    a = astring_insert(a, index, t);
+    char *str = astring_to_string(a);
+    assert(strcmp(str, res) == 0);
+    free_astring(a);
+    free(str);
+}
+
+
 int main (){
     assert(test_convert("Hello World"));
     assert(test_convert("Skibidi Gyatt"));
@@ -52,6 +88,11 @@ int main (){
 
     test_index_at("Hello World");
     test_index_at("Silly Goose");
+
+    test_update("Hello World", "Goodbye");
+
+    test_insert("Hello", "World", 5);
+    test_insert("Herld", "llo Wo", 2);
 
     printf("All tests passed!\n");
     return 0;
