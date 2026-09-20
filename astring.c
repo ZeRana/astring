@@ -59,14 +59,14 @@ bool is_astring (astring_t *a){
 
     if (a->left != NULL) {
         left_size = a->left->size;
+        left_height = a->left->height;
     }
     if (a->right != NULL){
         right_size = a->right->size;
+        right_height = a->right->height;
     }
 
     if (a->size != right_size + left_size + 1) {return false;}
-    size_t diff = (left_size > right_size) ? (left_size - right_size) : (right_size - left_size);
-    if (diff > 1) {return false;}
 
     size_t hdiff = (left_height > right_height) ? (left_height - right_height) : (right_height - left_height);
     if (hdiff > 1) {return false;}
@@ -140,13 +140,14 @@ astring_t *string_to_astring_helper(char *str, size_t size, thread_limiter_t *tl
         int success = pthread_create(&tid, NULL, string_to_astring_thread, &left_args);
         if (success == 0){
             // Thread created
+            a->right = string_to_astring_helper((str + mid + 1), (size-mid-1), tl);
             pthread_join(tid, NULL);
             a->left = left_args.result;
         } else {
             // Thread not created
             a->left = string_to_astring_helper(str, mid, tl);
+            a->right = string_to_astring_helper((str + mid + 1), (size-mid-1), tl);
         }
-        a->right = string_to_astring_helper((str + mid + 1), (size-mid-1), tl);
         pthread_mutex_lock(&tl->lock);
         tl->num_threads--;
         pthread_mutex_unlock(&tl->lock);
