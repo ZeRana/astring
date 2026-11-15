@@ -8,7 +8,9 @@
 #include "contracts.h"
 #include "astring.h"
 
+#ifndef THREAD_DEPTH_MAX
 #define THREAD_DEPTH_MAX 8
+#endif
 
 // Limiting recursive functions thread making abilities
 typedef struct {
@@ -77,19 +79,21 @@ bool is_astring (astring_t *a){
 }
 
 // O(1)
-inline size_t astring_size(astring_t *a){
+size_t astring_size(astring_t *a){
     REQUIRES(is_astring(a));
     // NULL is the empty string
     if (a == NULL) {return 0;}
     return a->size;
 }
 
+// O(1)
 size_t astring_height(astring_t *a){
     REQUIRES(is_astring(a));
     if (a == NULL) {return 0;}
     return a->height;
 }
 
+// O(1)
 void fix_stats(astring_t *a){
     if (a != NULL){
         size_t lh = astring_height(a->left);
@@ -516,6 +520,86 @@ astring_t *astring_insert(astring_t *a, size_t i, const char *str){
     ENSURES(is_astring(result));
     return result;
 }
+
+astring_t *astring_concat(astring_t *a1, astring_t *a2){
+    REQUIRES(is_astring(a1));
+    REQUIRES(is_astring(a2));
+    return astring_join(a1, NULL, a2);
+}
+
+char astring_char(astring_t *a){
+    return a->data;
+}
+
+
+typedef struct node_header {
+    astring_t *data;
+    struct node_header *next;
+} node_t;
+
+typedef struct astring_iterator_header {
+    node_t *stack;
+    astring_t *a;
+} astring_iterator_t;
+
+void push(astring_iterator_t *iterator, astring_t *a){
+    node_t *new_node = xmalloc(sizeof(node_t));
+    new_node->data = a;
+    new_node->next = iterator->stack;
+    iterator->stack = new_node;
+}
+
+astring_t *pop(astring_iterator_t *iterator){
+    node_t *element = iterator->stack;
+    if (element == NULL) {return NULL;}
+    iterator->stack = element->next;
+    astring_t *ret_val = element->data;
+    free(element);
+    ENSURES(is_astring(ret_val));
+    return ret_val;
+}
+
+void iterator_push_left(astring_iterator_t *iterator, astring_t *a){
+    REQUIRES(is_astring(a));
+    while (a != NULL){
+        push(iterator, a);
+        a = a->left;
+    }
+}
+
+astring_iterator_t *new_iterator(astring_t *a){
+    REQUIRES(is_astring(a));
+    astring_iterator_t *iterator = xmalloc(sizeof(iterator));
+    iterator->stack = NULL;
+    iterator_push_left(iterator, a);
+    return iterator;
+}
+
+astring_t *iterator_next(astring_iterator_t *iterator){
+    astring_t *a = pop(iterator);
+    iterator_push_left(iterator, a->right);
+    ENSURES(is_astring(a));
+    return a;
+}
+
+bool iterator_has_next(astring_iterator_t *iterator){
+    return iterator->stack != NULL;
+}
+
+void free_iterator(astring_iterator_t *iterator){
+    node_t *head = iterator->stack;
+    while (head != NULL){
+        node_t *temp = head->next;
+        free(head);
+        head = temp;
+    }
+    free(iterator);
+}
+
+
+
+
+
 
 
 

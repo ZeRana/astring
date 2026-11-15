@@ -69,8 +69,44 @@ void test_insert(char *s, char* t, size_t index){
     a = astring_insert(a, index, t);
     char *str = astring_to_string(a);
     assert(strcmp(str, res) == 0);
+
+    free(res);
     free_astring(a);
     free(str);
+}
+
+void test_concat(char *s1, char *s2){
+    size_t res_len = strlen(s1) + strlen(s2) + 1;
+    char *res = malloc(sizeof(char) * res_len);
+    memcpy(res, s1, strlen(s1));
+    memcpy(res + strlen(s1), s2, strlen(s2));
+    res[res_len - 1] = '\0';
+
+    astring_t *a1 = string_to_astring(s1);
+    astring_t *a2 = string_to_astring(s2);
+    astring_t *astring_res = astring_concat(a1, a2);
+    char *str_res = astring_to_string(astring_res);
+    
+    assert(strcmp(res, str_res) == 0);
+    
+    free(res);
+    free(str_res);
+    free_astring(astring_res);
+}
+
+void test_iterator(char *s){
+    astring_t *a = string_to_astring(s);
+    astring_iterator_t *iterator = new_iterator(a);
+    astring_t *cur;
+    size_t i = 0;
+    while(iterator_has_next(iterator)){
+        cur = iterator_next(iterator);
+        assert(astring_char(cur) == s[i]);
+        i++;
+    }
+
+    free_astring(a);
+    free_iterator(iterator);
 }
 
 
@@ -93,6 +129,13 @@ int main (){
 
     test_insert("Hello", "World", 5);
     test_insert("Herld", "llo Wo", 2);
+
+    test_concat("Hello", " World");
+    test_concat("Meow", "");
+
+    test_iterator("Hello world");
+
+    
 
     printf("All tests passed!\n");
     return 0;
