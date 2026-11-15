@@ -18,11 +18,13 @@ void free_astring(astring_t *a);
 void print_astring(astring_t *a);
 char *astring_to_string(astring_t *a);
 bool astring_eq(astring_t *a1, astring_t *a2); // Threaded
+int astring_cmp(astring_t *a1, astring_t *a2);
 char astring_index_at(astring_t *a, size_t i);
 void astring_update_char(astring_t *a, size_t index, char new_val);
 astring_t *astring_insert(astring_t *a, size_t i, const char *str); // Threaded
 astring_t *astring_concat(astring_t *a1, astring_t *a2);
 char astring_char(astring_t *a);
+astring_t *astring_copy(astring_t *a);
 
 
 astring_iterator_t *new_iterator(astring_t *a); // lazy implementation of an iterator taking up o(h) space

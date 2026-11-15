@@ -109,6 +109,35 @@ void test_iterator(char *s){
     free_iterator(iterator);
 }
 
+void test_copy(char *s){
+    astring_t *a = string_to_astring(s);
+    astring_t *new_a = astring_copy(a);
+
+    assert(astring_eq(a, new_a));
+
+    free_astring(a);
+    free_astring(new_a);
+}
+
+void test_cmp(char *s1, char *s2){
+    astring_t *a1 = string_to_astring(s1);
+    astring_t *a2 = string_to_astring(s2);
+
+    int string_res = strcmp(s1, s2);
+    int astring_res = astring_cmp(a1, a2);
+
+    if (string_res < 0 && astring_res >= 0){
+        assert(false);
+    } else if (string_res > 0 && astring_res <= 0){
+        assert(false);
+    } else {
+        assert(true);
+    }
+
+    free_astring(a1);
+    free_astring(a2);
+}
+
 
 int main (){
     assert(test_convert("Hello World"));
@@ -135,7 +164,14 @@ int main (){
 
     test_iterator("Hello world");
 
-    
+    test_copy("Hello world");
+
+    test_cmp("Hello world", "Hello world");
+    test_cmp("hello world", "Hello world");
+    test_cmp("Hello world", "hello world");
+    test_cmp("Hello World", "Hello world");
+    test_cmp("Hello world", "Hello World");
+    test_cmp("Hello", "Hello world");
 
     printf("All tests passed!\n");
     return 0;

@@ -31,7 +31,7 @@ void free_thread_limiter (thread_limiter_t *tl) {
     pthread_mutex_destroy(&tl->lock);
 }
 
-
+// I don't want to do malloc error handling :)
 void *xmalloc(size_t size){
     void *p = malloc(size);
     if (p == NULL) {abort();}
@@ -163,9 +163,9 @@ astring_t *string_to_astring_helper(char *str, size_t size, thread_limiter_t *tl
 
 // O(strlen(str))
 astring_t *string_to_astring(char *str){
+    REQUIRES(str != NULL);
     thread_limiter_t tl;
     new_thread_limiter(&tl);
-    REQUIRES(str != NULL);
     size_t len = strlen(str);
     astring_t *a = string_to_astring_helper(str, len, &tl);
     free_thread_limiter(&tl);
@@ -176,7 +176,6 @@ astring_t *string_to_astring(char *str){
 // O(a->size)
 void free_astring(astring_t *a){
     if(a == NULL) {(void)0;}
-    else if (a->size == 1) {free(a);}
     else{
         free_astring(a->left);
         free_astring(a->right);
@@ -275,6 +274,7 @@ bool astring_eq(astring_t *a1, astring_t *a2){
     free_thread_limiter(&tl);
     return res;  
 }
+
 
 // Returns a pointer to the node for future inserting use
 // O(log n)
@@ -531,6 +531,21 @@ char astring_char(astring_t *a){
     return a->data;
 }
 
+// not multithreaded because of the overhead that malloc imposes for multithreading
+astring_t *astring_copy(astring_t *a){
+    REQUIRES(is_astring(a));
+    if (a == NULL) {return NULL;}
+    astring_t *new_a = xmalloc(sizeof(astring_t));
+    new_a->size = a->size;
+    new_a->height = a->height;
+    new_a->data = a->data;
+    new_a->left = astring_copy(a->left);
+    new_a->right = astring_copy(a->right);
+
+    ENSURES(is_astring(new_a));
+    return new_a;
+}
+
 
 typedef struct node_header {
     astring_t *data;
@@ -594,6 +609,37 @@ void free_iterator(astring_iterator_t *iterator){
         head = temp;
     }
     free(iterator);
+}
+
+// O(max(size a1, size a2))
+// Takes o(h) space
+int astring_cmp(astring_t *a1, astring_t *a2){
+    REQUIRES(is_astring(a1) & is_astring(a2));
+
+    astring_iterator_t *iterator1 = new_iterator(a1);
+    astring_iterator_t *iterator2 = new_iterator(a2);
+
+    while(true){
+        a1 = iterator_next(iterator1);
+        a2 = iterator_next(iterator2);
+        if (!iterator_has_next(iterator1) & !iterator_has_next(iterator2)) {
+            free_iterator(iterator1);
+            free_iterator(iterator2);
+            return 0;
+        } else if ((!iterator_has_next(iterator1) & iterator_has_next(iterator2))) {
+            free_iterator(iterator1);
+            free_iterator(iterator2);
+            return -1;
+        } else if ((iterator_has_next(iterator1) & !iterator_has_next(iterator2))) {
+            free_iterator(iterator1);
+            free_iterator(iterator2);
+            return 1;
+        } else if (a1->data != a2->data){
+            free_iterator(iterator1);
+            free_iterator(iterator2);
+            return (a1->data < a2->data) ? -1 : 1;
+        }
+    }
 }
 
 
