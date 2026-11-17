@@ -138,6 +138,40 @@ void test_cmp(char *s1, char *s2){
     free_astring(a2);
 }
 
+void test_is_upper(char *s, bool expected){
+    astring_t *a = string_to_astring(s);
+    assert(astring_is_upper(a) == expected);
+    free_astring(a);
+}
+
+void test_is_lower(char *s, bool expected){
+    astring_t *a = string_to_astring(s);
+    assert(astring_is_lower(a) == expected);
+    free_astring(a);
+}
+
+void test_to_upper(char *s, char *expected){
+    astring_t *a = string_to_astring(s);
+    astring_to_upper(a);
+    astring_t *expected_a = string_to_astring(expected);
+
+    assert(astring_eq(a, expected_a));
+
+    free_astring(a);
+    free_astring(expected_a);
+}
+
+void test_to_lower(char *s, char *expected){
+    astring_t *a = string_to_astring(s);
+    astring_to_lower(a);
+    astring_t *expected_a = string_to_astring(expected);
+
+    assert(astring_eq(a, expected_a));
+
+    free_astring(a);
+    free_astring(expected_a);
+}
+
 
 int main (){
     assert(test_convert("Hello World"));
@@ -172,6 +206,21 @@ int main (){
     test_cmp("Hello World", "Hello world");
     test_cmp("Hello world", "Hello World");
     test_cmp("Hello", "Hello world");
+
+    test_is_upper("Hello World", false);
+    test_is_upper("HELLO WORLD", true);
+    test_is_upper("hello world", false);
+    
+    test_is_lower("Hello World", false);
+    test_is_lower("hello world", true);
+    test_is_lower("HELLO WORLD", false);
+
+    test_to_upper("Hello World", "HELLO WORLD");
+    test_to_upper("Hello!", "HELLO!");
+    test_to_upper("AZaz", "AZAZ");
+    
+    test_to_lower("Hello World", "hello world");
+    test_to_lower("AZaz", "azaz");
 
     printf("All tests passed!\n");
     return 0;

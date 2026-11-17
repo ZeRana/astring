@@ -12,6 +12,13 @@
 #define THREAD_DEPTH_MAX 8
 #endif
 
+#define ASCII_UPPER_A 65
+#define ASCII_UPPER_Z 90
+#define ASCII_LOWER_A 97
+#define ASCII_LOWER_Z 122
+
+#define CASE_OFFSET (ASCII_LOWER_A - ASCII_UPPER_A)
+
 // Limiting recursive functions thread making abilities
 typedef struct {
     uint8_t num_threads;
@@ -224,7 +231,7 @@ typedef struct {
 
 bool astring_eq_helper(astring_t *a1, astring_t *a2, thread_limiter_t *tl);
 
-void* astring_eq_thread(void *args){
+void *astring_eq_thread(void *args){
     eq_helper_t *arg = (eq_helper_t*)args;
     arg->result = astring_eq_helper(arg->a1, arg->a2, arg->tl);
     return (void*)arg;
@@ -642,7 +649,144 @@ int astring_cmp(astring_t *a1, astring_t *a2){
     }
 }
 
+typedef struct {
+    astring_t *a;
+    thread_limiter_t *tl;
+    uint8_t lower;
+    uint8_t upper;
+    bool result;
+} case_helper_t;
 
+bool astring_is_case_helper(astring_t *a, uint8_t lower, uint8_t upper, thread_limiter_t *tl);
+
+void *astring_is_case_thread(void *args){
+    case_helper_t *arg = (case_helper_t*)args;
+    arg->result = astring_is_case_helper(arg->a, arg->lower, arg->upper, arg->tl);
+    return (void*)arg;
+}
+
+bool astring_is_case_helper(astring_t *a, uint8_t lower, uint8_t upper, thread_limiter_t *tl){
+    REQUIRES(is_astring(a));
+    if (a == NULL) {return true;}
+    else if (((uint8_t)(a->data) >= lower) & ((uint8_t)(a->data) <= upper)) {return false;} // checks that its in the other case
+
+    // Checking to insure we don't over utilize resources
+    pthread_mutex_lock(&tl->lock);
+    bool spawn = (tl->num_threads < THREAD_DEPTH_MAX);
+    if (spawn) {tl->num_threads++;}
+    pthread_mutex_unlock(&tl->lock);
+    if (!spawn){
+        return astring_is_case_helper(a->left, lower, upper, tl) & astring_is_case_helper(a->right, lower, upper, tl);
+    } else {
+        case_helper_t left_args = { a->left, tl, lower, upper, false };
+        pthread_t tid;
+        int success = pthread_create(&tid, NULL, astring_is_case_thread, &left_args);
+        bool left_result = false;
+        if (success == 0){
+            // Thread created
+            pthread_join(tid, NULL);
+            left_result = left_args.result;
+        } else {
+            // Thread not created
+            left_result = astring_is_case_helper(a->left, lower, upper, tl);
+        }
+
+        bool right_result = astring_is_case_helper(a->right, lower, upper, tl);
+
+        pthread_mutex_lock(&tl->lock);
+        tl->num_threads--;
+        pthread_mutex_unlock(&tl->lock);
+        return left_result & right_result;
+    }
+}
+
+bool astring_is_upper(astring_t *a){
+    REQUIRES(is_astring(a));
+    thread_limiter_t tl;
+    new_thread_limiter(&tl);
+    bool res = astring_is_case_helper(a, ASCII_LOWER_A, ASCII_LOWER_Z, &tl);
+    free_thread_limiter(&tl);
+    return res;
+}
+
+bool astring_is_lower(astring_t *a){
+    REQUIRES(is_astring(a));
+    thread_limiter_t tl;
+    new_thread_limiter(&tl);
+    bool res = astring_is_case_helper(a, ASCII_UPPER_A, ASCII_UPPER_Z, &tl);
+    free_thread_limiter(&tl);
+    return res;
+}
+
+
+typedef struct {
+    astring_t *a;
+    thread_limiter_t *tl;
+    uint8_t lower;
+    uint8_t upper;
+    int8_t offset;
+} to_case_helper_t;
+
+void astring_to_case_helper(astring_t *a, uint8_t lower, uint8_t upper, int8_t offset, thread_limiter_t *tl);
+
+void *astring_to_case_thread(void *args){
+    to_case_helper_t *arg = (to_case_helper_t*)args;
+    astring_to_case_helper(arg->a, arg->lower, arg->upper, arg->offset, arg->tl);
+    return NULL;
+}
+
+void astring_to_case_helper(astring_t *a, uint8_t lower, uint8_t upper, int8_t offset, thread_limiter_t *tl){
+    REQUIRES(is_astring(a));
+    if (a == NULL) {return;}
+    else if (((uint8_t)(a->data) >= lower) & ((uint8_t)(a->data) <= upper)) {
+        // checks that its in the other case and flips it
+        a->data += offset;
+    }
+    // Checking to insure we don't over utilize resources
+    pthread_mutex_lock(&tl->lock);
+    bool spawn = (tl->num_threads < THREAD_DEPTH_MAX);
+    if (spawn) {tl->num_threads++;}
+    pthread_mutex_unlock(&tl->lock);
+    if (!spawn){
+        astring_to_case_helper(a->left, lower, upper, offset, tl);
+        astring_to_case_helper(a->right, lower, upper, offset, tl);
+    } else {
+        to_case_helper_t left_args = { a->left, tl, lower, upper, offset };
+        pthread_t tid;
+        int success = pthread_create(&tid, NULL, astring_to_case_thread, &left_args);
+        if (success == 0){
+            // Thread created
+            pthread_join(tid, NULL);
+        } else {
+            // Thread not created
+            astring_to_case_helper(a->left, lower, upper, offset, tl);
+        }
+
+        astring_to_case_helper(a->right, lower, upper, offset, tl);
+
+        pthread_mutex_lock(&tl->lock);
+        tl->num_threads--;
+        pthread_mutex_unlock(&tl->lock);
+    }
+}
+
+void astring_to_upper(astring_t *a){
+    REQUIRES(is_astring(a));
+    thread_limiter_t tl;
+    new_thread_limiter(&tl);
+    astring_to_case_helper(a, ASCII_LOWER_A, ASCII_LOWER_Z, -CASE_OFFSET, &tl);
+    free_thread_limiter(&tl);
+    ENSURES(is_astring(a) & astring_is_upper(a));
+}
+
+void astring_to_lower(astring_t *a){
+    REQUIRES(is_astring(a));
+    thread_limiter_t tl;
+    new_thread_limiter(&tl);
+    astring_to_case_helper(a, ASCII_UPPER_A, ASCII_UPPER_Z, CASE_OFFSET, &tl);
+    free_thread_limiter(&tl);
+    ENSURES(is_astring(a) & astring_is_lower(a));
+}
 
 
 

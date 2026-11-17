@@ -26,6 +26,11 @@ astring_t *astring_concat(astring_t *a1, astring_t *a2);
 char astring_char(astring_t *a);
 astring_t *astring_copy(astring_t *a);
 
+bool astring_is_upper(astring_t *a); // Threaded
+bool astring_is_lower(astring_t *a); // Threaded
+void astring_to_upper(astring_t *a); // Threaded, modified in place
+void astring_to_lower(astring_t *a); // Threaded, modified in place
+
 
 astring_iterator_t *new_iterator(astring_t *a); // lazy implementation of an iterator taking up o(h) space
 astring_t *iterator_next(astring_iterator_t *iterator);
